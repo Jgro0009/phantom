@@ -50,6 +50,7 @@ module setstar
     real :: r_code,m_code,rcore_code,mcore_code,hsoft_code,lcore_code,hacc_code
     real :: ui_coef
     real :: polyk
+    real :: polyn
     real :: initialtemp
     character(len=120) :: input_profile,dens_profile,compfile
     character(len=120) :: outputfilename ! outputfilename is the path to the cored profile
@@ -89,6 +90,7 @@ subroutine set_defaults_star(star)
  star%m           = '1.0 msun'
  star%ui_coef     = 0.05
  star%polyk       = 0.
+ star%polyn       = 1.5
  star%initialtemp = 1.0e7
  star%isoftcore   = 0
  star%isinkcore   = .false.
@@ -227,7 +229,7 @@ subroutine set_star(id,master,star,xyzh,vxyzu,eos_vars,rad,&
  real, allocatable              :: r(:),den(:),pres(:),temp(:),en(:),mtab(:),Xfrac(:),Yfrac(:),mu(:)
  real, allocatable              :: composition(:,:)
  real                           :: rmin,rhocentre,rmserr,en_err
- real                           :: mstar
+ real                           :: mstar,gamma_poly
  character(len=20), allocatable :: comp_label(:)
  character(len=30)              :: lattice  ! The lattice type if stretchmap is used
  logical                        :: use_exactN,composition_exists,write_dumps
@@ -264,8 +266,9 @@ subroutine set_star(id,master,star,xyzh,vxyzu,eos_vars,rad,&
  !
  ! get the desired tables of density, pressure, temperature and composition
  ! as a function of radius / mass fraction
- !
- call read_star_profile(star%iprofile,ieos,star%input_profile,gamma,star%polyk,&
+
+ gamma_poly = 1.+1./star%polyn
+ call read_star_profile(star%iprofile,ieos,star%input_profile,gamma_poly,star%polyk,&
                         star%ui_coef,r,den,pres,temp,en,mtab,X_in,Z_in,Xfrac,Yfrac,mu,&
                         npts,rmin,star%r_code,mstar,rhocentre,&
                         star%isoftcore,star%isofteningopt,star%rcore_code,star%mcore_code,&
@@ -846,6 +849,10 @@ subroutine write_options_star(star,iunit,label)
 
        ! stellar mass
        call write_inopt(star%m,'Mstar'//trim(c),'mass of body '//trim(c)//trim(string)//')',iunit)
+       if (star%iprofile == ipoly) then
+          call write_inopt(star%polyn,'polyn'//trim(c),'polytropic n of body '&
+                           //trim(c)//trim(string),iunit)
+       endif
     endif
  endif
 
@@ -999,6 +1006,9 @@ subroutine read_options_star(star,db,nerr,label)
           call read_inopt(star%r,'Rstar'//trim(c),db,errcount=nerr,err=ierr)
        endif
        call read_inopt(star%m,'Mstar'//trim(c),db,errcount=nerr,err=ierr)
+       if (star%iprofile == ipoly) then
+          call read_inopt(star%polyn,'polyn'//trim(c),db,errcount=nerr,err=ierr)
+       endif
     endif
  endif
 
