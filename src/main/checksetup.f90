@@ -15,9 +15,9 @@ module checksetup
 ! :Runtime parameters: None
 !
 ! :Dependencies: HIIRegion, boundary, boundary_dyn, centreofmass, dim,
-!   dust, eos, externalforces, inject, io, metric_tools, nicil, options,
-!   part, physcon, ptmass, ptmass_radiation, sortutils, timestep, units,
-!   utils_gr
+!   dust, dust_formation, eos, externalforces, inject, io, metric,
+!   metric_tools, nicil, options, part, physcon, ptmass, ptmass_radiation,
+!   sortutils, timestep, units, utils_gr
 !
  implicit none
  public :: check_setup
@@ -44,8 +44,8 @@ subroutine check_setup(nerror,nwarn,restart)
                 iphase,maxphase,isetphase,labeltype,igas,maxtypes,&
                 idust,xyzmh_ptmass,vxyz_ptmass,iboundary,isdeadh,ll,ideadhead,&
                 kill_particle,shuffle_part,iamtype,iamdust,Bxyz,rad,radprop, &
-                remove_particle_from_npartoftype,ien_type,ien_etotal,gr
- use eos,             only:gamma,polyk,eos_is_non_ideal,eos_requires_polyk
+                remove_particle_from_npartoftype,ien_type,ien_etotal,gr,eos_vars,itemp
+ use eos,             only:gamma,polyk,eos_requires_polyk,ieos_helmholtz
  use centreofmass,    only:get_centreofmass
  use options,         only:ieos,iexternalforce,use_dustfrac,use_hybrid
  use io,              only:id,master
@@ -251,6 +251,22 @@ subroutine check_setup(nerror,nwarn,restart)
        gamma = 1.
        print*,'*** Resetting gamma to 1, gamma = ',gamma
        nwarn = nwarn + 1
+    endif
+ endif
+ !
+ !--check that temperature guess is set if using Helmholtz EOS
+ !
+ if (ieos==ieos_helmholtz) then
+    nbad = 0
+    do i=1,npart
+       if (eos_vars(itemp,i) <= 0.) then
+          nbad = nbad + 1
+          if (nbad <= 10) print*,' particle ',i,' temperature guess = ',eos_vars(itemp,i)
+       endif
+    enddo
+    if (nbad > 0) then
+       print*,'ERROR: Using Helmholtz EOS but temperature guess not set on ',nbad,' of ',npart,' particles'
+       nerror = nerror + 1
     endif
  endif
 !
@@ -916,7 +932,8 @@ end subroutine check_setup_dustfrac
 !+
 !------------------------------------------------------------------
 subroutine check_gr(npart,nerror,xyzh,vxyzu)
- use metric_tools, only:pack_metric,unpack_metric
+ use metric_tools, only:pack_metric,unpack_metric,imet_rn,imetric
+ use metric,       only:charge,mass1
  use utils_gr,     only:get_u0
  use part,         only:isdead_or_accreted,ien_type,ien_entropy,ien_etotal,ien_entropy_s
  use units,        only:in_geometric_units,get_G_code,get_c_code
@@ -958,6 +975,16 @@ subroutine check_gr(npart,nerror,xyzh,vxyzu)
     print "(/,a,i1,a,i1,a,i3,/)",' ERROR: ien_type is incorrect for GR, need ', &
                                  ien_entropy, ', ', ien_etotal, ' or ', ien_entropy_s, &
                                  ' but get ', ien_type
+    nerror = nerror + 1
+ endif
+
+ if (imetric==imet_rn) then
+    if (abs(mass1-1.) > epsilon(mass1)) then
+       print*, ' mass1 in code units shall be unity for proper interpretation'
+       nerror = nerror + 1
+    endif
+ elseif (abs(charge) > 0.) then
+    print*,' charge should be zero for this metric'
     nerror = nerror + 1
  endif
 
@@ -1105,7 +1132,7 @@ subroutine check_cooling(xcom,vcom,nerror)
  use part,            only:nptmass
  use eos,             only:ipdv_heating,ishock_heating,eos_allows_shock_and_work,ieos
  integer, intent(inout) :: nerror
- real,intent(in)        :: xcom(ndim),vcom(ndim)
+ real,    intent(in)    :: xcom(ndim),vcom(ndim)
 
  if (.not.h2chemistry .and. maxvxyzu >= 4 .and. icooling == 3 .and. iexternalforce/=iext_corotate .and. nptmass==0) then
     if (dot_product(xcom,xcom) >  1.e-2) then
